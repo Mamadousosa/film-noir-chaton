@@ -80,7 +80,6 @@ select option{background:var(--bg2);color:var(--ink)}
 .script-scene .sc-dialogue{color:#f0d78a;font-style:italic}
 .script-scene .sc-overlay{color:#e8a87c;font-family:var(--fm);font-size:.78rem}
 .script-scene .sc-character{color:#b8d8e8}
-.script-scene .sc-shots{margin-top:.4rem;padding:.4rem .6rem;background:rgba(255,255,255,.02);border-radius:3px;font-size:.76rem;color:var(--dim);font-family:var(--fm)}
 .images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.8rem;margin-top:.8rem}
 .kf-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .3s;position:relative}
 .kf-card.loading{border-color:var(--acc)}
@@ -158,11 +157,11 @@ select option{background:var(--bg2);color:var(--ink)}
 
 <header>
 <h1>Film Noir Chaton</h1>
-<p class="subtitle">Un polar pastel de 10 scènes, en mode keyframes — chaton détective en habits rétro</p>
+<p class="subtitle">Un polar pastel de 10 scènes — chaton détective en habits rétro</p>
 </header>
 
 <div class="banner">
-<strong>Un seul bouton.</strong> L'IA écrit un <span class="hl">polar pastel</span>, génère <span class="hl">11 images-clés</span> (chaque image de fin devient le début de la scène suivante), puis crée <span class="hl">10 vidéos keyframes</span> en parallèle — une par clé API. Diffusion séquentielle avec overlay et <span class="hl">narration vocale française</span>.
+<strong>Un seul bouton.</strong> L'IA écrit un <span class="hl">polar pastel</span>, génère <span class="hl">11 images-clés</span>, puis crée <span class="hl">10 vidéos</span> en parallèle — une par clé API. Diffusion séquentielle avec overlay et <span class="hl">narration vocale française</span>.
 </div>
 
 <div class="panel" id="api-panel">
@@ -176,7 +175,7 @@ select option{background:var(--bg2);color:var(--ink)}
 
 <div class="panel">
 <label class="label">Sujet du polar</label>
-<textarea id="theme-input" placeholder="Ex : Un chaton détective mène l'enquête dans un port brumeux des années 40, où un poisson rouge a disparu du bocal du maire…">Un chaton détective solitaire enquête sur la disparition d'un poisson rouge dans le bocal du maire d'un port brumeux des années 40. Pistoles chromées, imperméables pastel, brume rose et secrets enfouis. Il découvre que le coupable n'est autre que le majordome — un chat persan aux yeux d'or.</textarea>
+<textarea id="theme-input" placeholder="Ex : Un chaton détective mène l'enquête dans un port brumeux des années 40…">Un chaton détective solitaire enquête sur la disparition d'un poisson rouge dans le bocal du maire d'un port brumeux des années 40. Pistoles chromées, imperméables pastel, brume rose et secrets enfouis. Il découvre que le coupable n'est autre que le majordome — un chat persan aux yeux d'or.</textarea>
 </div>
 
 <div class="panel">
@@ -727,7 +726,7 @@ async function generateImage(prompt) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// VIDEO — POLLING MULTI-ENDPOINTS
+// VIDÉO — VERSION SIMPLIFIÉE (format validé Kata Studio)
 // ══════════════════════════════════════════════════════════════════
 function decodeCompositeId(composite){
   if(!composite||typeof composite!=='string')return null;
@@ -742,7 +741,7 @@ function decodeCompositeId(composite){
   return null;
 }
 
-// ⚡ VERSION CORRIGÉE : keyframes dans extra_body.image = [frame1, frame2]
+// ⚡ FONCTION CORRIGÉE : image à la racine, format validé
 async function createVideoTask(prompt, firstFrameUrl, lastFrameUrl, duration) {
   const body = {
     model: MODEL_VIDEO,
@@ -750,17 +749,22 @@ async function createVideoTask(prompt, firstFrameUrl, lastFrameUrl, duration) {
     num_frames: duration,
     frame_rate: FRAME_RATE
   };
-  if (firstFrameUrl && lastFrameUrl) {
-    body.extra_body = { image: [firstFrameUrl, lastFrameUrl] };
-  } else if (firstFrameUrl) {
-    body.image = firstFrameUrl;
-  }
-  debugLog('ai', 'PROMPT VIDÉO', 'Envoyé (' + prompt.length + ' chars · keyframes ' + (firstFrameUrl && lastFrameUrl ? 'OUI' : 'NON') + ')');
+  if (firstFrameUrl) body.image = firstFrameUrl;
+
+  debugLog('ai', 'PROMPT VIDÉO', 'Envoi (' + prompt.length + ' chars · image=' + (firstFrameUrl ? 'OUI' : 'NON') + ')');
+
   const res = await apiFetch(API_BASE + '/videos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   }, 'Video Task', 4);
+
+  if (!res.ok) {
+    const err = await res.text();
+    debugLog('error', 'VIDÉO', 'HTTP ' + res.status + ' — ' + err.slice(0, 500));
+    throw new Error('HTTP ' + res.status + ' — ' + err.slice(0, 200));
+  }
+
   const data = await res.json();
   debugLog('response', 'VIDÉO CRÉÉE', 'Réponse du POST /videos', data);
   const compositeId = data.video_id || data.id || data.task_id;
@@ -873,8 +877,6 @@ async function pollVideo(videoIdObj, onProgress) {
 // ══════════════════════════════════════════════════════════════════
 // PROMPT BUILDERS
 // ══════════════════════════════════════════════════════════════════
-function pickPalette(){return PALETTES[Math.floor(Math.random()*PALETTES.length)]}
-
 function buildScriptPrompt(theme, palette, director, sceneCount){
   const paletteStr=palette.colors.join(', ');
   return [
@@ -888,60 +890,36 @@ function buildScriptPrompt(theme, palette, director, sceneCount){
     '',
     'PERSONNAGES — CHATONS DÉTECTIVES :',
     'Tous les personnages sont des CHATONS MIGNONS anthropomorphes (tête de chaton kawaii sur corps humain).',
-    'Ils portent des TENUES DE POLAR RÉTRO des années 40 : trench-coat pastel, fedora assorti, cravate, gants, parfois une pipe en bois (profil).',
-    'Le DÉTECTIVE PRINCIPAL est un chaton décrit UNE SEULE FOIS dans "detective" et identique dans toutes les scènes.',
-    'Les AUTRES PERSONNAGES (suspects, témoins, méchants) sont des chatons UNIQUES avec des races, couleurs de pelage, tenues et accessoires différents.',
-    'Expressions DEADPAN, aucun sourire, atmosphère polar.',
+    'Ils portent des TENUES DE POLAR RÉTRO des années 40 : trench-coat pastel, fedora assorti, cravate, gants.',
+    'Le DÉTECTIVE PRINCIPAL est un chaton décrit UNE SEULE FOIS dans "detective".',
+    'Expressions DEADPAN, aucun sourire.',
     '',
-    'DÉCORS : années 40, rétro, brumeux, coins sombres, néons pastel, bars, ports, bureaux de détective avec stores vénitiens, ruelles pluvieuses.',
+    'DÉCORS : années 40, brumeux, coins sombres, bars, ports, bureaux de détective, ruelles pluvieuses.',
     '',
-    'CONTINUITÉ KEYFRAMES (RÈGLE ABSOLUE) :',
-    'Le film sera généré en mode KEYFRAMES. Chaque scène est définie par DEUX images :',
-    '- La PREMIÈRE image de la scène N doit être VISUELLEMENT IDENTIQUE à la DERNIÈRE image de la scène N-1.',
-    '- La DERNIÈRE image de la scène N est une NOUVELLE composition, mais dans le même univers.',
-    'Tu dois décrire '+(sceneCount+1)+' images-clés : keyframe[0] est la première image de la scène 1, keyframe[i] est la DERNIÈRE image de la scène i ET la PREMIÈRE image de la scène i+1.',
-    '',
-    'DIALOGUE (règle absolue) : CHAQUE scène DOIT avoir un "dialogue.line_fr" REMPLI en français, court (5 à 12 mots MAXIMUM, une seule phrase), prononcé par le personnage principal de la scène. C\'est un polar : les répliques sont sèches, cyniques, mémorables.',
+    'DIALOGUE (règle absolue) : CHAQUE scène DOIT avoir un "dialogue.line_fr" EN FRANÇAIS, court (5 à 12 mots MAXIMUM). Répliques sèches, cyniques, style polar.',
     '',
     'RÈGLES JSON STRICTES :',
     '- Toutes les chaînes sur UNE SEULE LIGNE.',
     '- Chaque clé JSON entre guillemets doubles.',
-    '- Chaque propriété suivie d\'une virgule sauf la dernière.',
+    '- Pas de virgule finale. Pas de markdown.',
     '- N\'échappe PAS les apostrophes françaises.',
-    '- Échappe uniquement les guillemets doubles internes en \\".',
-    '- Pas de virgule finale. Pas de markdown. Pas de commentaire.',
     '',
-    'FORMAT DE SORTIE (retourne UNIQUEMENT ce JSON) :',
+    'FORMAT DE SORTIE (UNIQUEMENT ce JSON) :',
     '{',
     '  "title": "titre poétique court",',
     '  "logline": "résumé en une phrase",',
-    '  "detective": { "name": "Prénom Nom", "cat_face": "siamois aux yeux bleus, museau crème", "outfit": "trench-coat pastel rose, fedora moutarde, cravate crème", "physical_description": "cute kawaii humanoid kitten with a siamese cat face, wearing a pastel pink trench coat, mustard fedora hat, cream tie, film noir 1940s" },',
+    '  "detective": { "name": "Prénom Nom", "cat_face": "siamois aux yeux bleus", "outfit": "trench-coat pastel rose, fedora moutarde", "physical_description": "cute kawaii humanoid kitten with a siamese cat face, pastel pink trench coat, mustard fedora, film noir 1940s" },',
     '  "keyframes": [',
-    '    { "index": 0, "prompt": "detailed english prompt for keyframe 0 (opening frame)" },',
-    '    { "index": 1, "prompt": "detailed english prompt for keyframe 1 (end of scene 1 = start of scene 2)" },',
-    '    { "index": 2, "prompt": "..." }',
+    '    { "index": 0, "prompt": "english prompt for opening frame" },',
+    '    ... '+(sceneCount+1)+' total ...',
     '  ],',
     '  "scenes": [',
-    '    {',
-    '      "scene_number": 1,',
-    '      "keyframe_start": 0,',
-    '      "keyframe_end": 1,',
-    '      "character": { "name": "Prénom Nom", "physical_description": "..." },',
-    '      "decor": "english description of the noir 1940s pastel location",',
-    '      "action": "english description of the continuous movement from keyframe 0 to keyframe 1",',
-    '      "dialogue": { "speaker": "Nom", "line_fr": "phrase courte en français, 5-12 mots" },',
-    '      "text_overlay_fr": "BANDEAU COURT EN MAJUSCULES",',
-    '      "emotion": "one word"',
-    '    }',
-    '    ... exactly '+sceneCount+' scenes ...',
+    '    { "scene_number": 1, "keyframe_start": 0, "keyframe_end": 1, "character": { "name": "Nom", "physical_description": "..." }, "decor": "english", "action": "english movement", "dialogue": { "speaker": "Nom", "line_fr": "phrase courte FR" }, "text_overlay_fr": "BANDEAU", "emotion": "tension" }',
+    '    ... '+sceneCount+' scenes ...',
     '  ]',
     '}',
     '',
-    'IMPORTANT :',
-    '- "keyframes" contient exactement '+(sceneCount+1)+' éléments (index 0 à '+sceneCount+').',
-    '- Chaque keyframe prompt décrit une composition précise (plan, cadrage, éclairage, décor, personnages).',
-    '- Chaque scène référence son keyframe_start et keyframe_end.',
-    '- Les dialogues sont courts, secs, cyniques (style polar).'
+    'IMPORTANT : keyframes contient exactement '+(sceneCount+1)+' éléments.'
   ].join('\n');
 }
 
@@ -949,26 +927,17 @@ function buildKeyframePrompt(keyframePrompt, keyframeIndex, totalKeyframes, scri
   const detective=script.detective||{};
   const isFirst = keyframeIndex === 0;
   const isLast = keyframeIndex === totalKeyframes - 1;
-  const position = isFirst ? 'OPENING FRAME of the entire film' : (isLast ? 'CLOSING FRAME of the entire film' : ('INTERMEDIATE KEYFRAME — end of scene '+keyframeIndex+' = start of scene '+(keyframeIndex+1)));
+  const position = isFirst ? 'OPENING FRAME' : (isLast ? 'CLOSING FRAME' : ('INTERMEDIATE — transition scene '+keyframeIndex));
   return [
     'FILM NOIR PASTEL — CINEMATIC KEYFRAME — '+director.name.toUpperCase(),
     director.signature,
-    '',
-    'POSITION IN FILM : '+position,
-    '',
-    'MAIN CHARACTER (detective, IDENTICAL across all keyframes) :',
-    detective.name ? detective.name+' — '+(detective.physical_description||'') : 'A cute kawaii humanoid kitten detective',
-    '',
-    'PALETTE (strict) : '+palette.label+' → '+palette.colors.join(', ')+'. Every color must come from this palette. No other color.',
-    '',
-    'KEYFRAME CONTENT :',
-    keyframePrompt,
-    '',
-    'STYLE : 1940s film noir, pastel color palette, rainy/brumous atmospheres, venetian blind shadows, trench coats, fedoras, chrome pistols, smoky interiors.',
-    'All characters are cute kawaii humanoid kittens (kitten head on human body) in retro 1940s detective outfits.',
-    '',
-    'FORMAT : 16:9 horizontal, cinematic 35mm film grain, high detail.',
-    'No text, no subtitles, no watermarks, no logos.'
+    'POSITION : '+position,
+    'MAIN CHARACTER : '+(detective.name||'Kitten detective')+' — '+(detective.physical_description||'cute kawaii humanoid kitten detective'),
+    'PALETTE (strict) : '+palette.label+' → '+palette.colors.join(', '),
+    'CONTENT : '+keyframePrompt,
+    'STYLE : 1940s film noir, pastel colors, trench coats, fedoras, smoky interiors, venetian blind shadows.',
+    'All characters are cute kawaii humanoid kittens.',
+    'FORMAT : 16:9 horizontal, 35mm film grain, high detail. No text.'
   ].filter(Boolean).join('\n');
 }
 
@@ -976,29 +945,21 @@ function buildVideoPrompt(scene, script, palette, director){
   const detective=script.detective||{};
   const sceneChar=scene.character||{};
   const charName=sceneChar.name||detective.name||'Détective';
-  const charDesc=sceneChar.physical_description||detective.physical_description||'a cute kawaii humanoid kitten detective in 1940s trench coat';
+  const charDesc=sceneChar.physical_description||detective.physical_description||'cute kawaii humanoid kitten detective';
   const dialogue=(scene.dialogue&&scene.dialogue.line_fr)?scene.dialogue.line_fr:'';
   return [
-    'CRITICAL : The provided first frame is the EXACT first frame of this video. The provided last frame is the EXACT last frame. The entire video must smoothly interpolate between them.',
-    '',
+    'Animate this exact image as the starting frame. The subject must remain IDENTICAL to the source image.',
     'FILM NOIR PASTEL — SCENE '+(scene.scene_number||'?')+' — '+director.name.toUpperCase(),
     director.signature,
-    '',
-    'CHARACTER (IDENTICAL to the reference frames) : '+charName+' — '+charDesc,
-    '',
+    'CHARACTER : '+charName+' — '+charDesc,
     'DECOR : '+(scene.decor||''),
     'ACTION : '+(scene.action||''),
-    '',
-    'CAMERA : ONE SINGLE CONTINUOUS SLOW MOVEMENT. No cuts, no transitions, no angle changes. The camera may slowly dolly-in, dolly-out, or laterally track — always smooth and deliberate.',
-    '',
-    'AUDIO : ABSOLUTELY NO MUSIC. No instruments, no soundtrack, no melody, no drums, no beats. ONLY natural ambient noir sounds — rain on pavement, distant foghorns, subtle footsteps, a clock ticking, a car passing in the distance, the soft crackle of a cigarette.'+
-      (dialogue?(' The character speaks ONE short line in French with a dry, cynical voice : "'+dialogue+'" — whispered slowly, film noir delivery, one single breath.'):''),
-    '',
-    'ATMOSPHERE : 1940s film noir in pastel color palette — smoky, brumous, rainy streets, chrome reflections, low-key lighting with venetian blind shadows.',
-    '',
-    'FORMAT : 16:9 horizontal, 24fps, photorealistic, cinematic, 35mm film grain.',
-    'No text, no subtitles, no watermarks, no music, no on-screen graphics.',
-    'Perfect continuity between the first frame, the interpolated motion, and the last frame.'
+    'CAMERA : ONE SINGLE CONTINUOUS SLOW MOVEMENT. Smooth dolly-in, dolly-out, or lateral tracking.',
+    'AUDIO : NO MUSIC. Only natural noir ambient sounds — rain, footsteps, distant foghorn, clock ticking.'+
+      (dialogue?(' The character speaks ONE short line in French : "'+dialogue+'" — dry, cynical, film noir delivery.'):''),
+    'ATMOSPHERE : 1940s film noir in pastel color palette, smoky, brumous, rainy streets.',
+    'FORMAT : 16:9 horizontal, 24fps, photorealistic, 35mm film grain.',
+    'No text, no subtitles, no watermarks, no music.'
   ].join('\n');
 }
 
@@ -1008,16 +969,16 @@ function buildVideoPrompt(scene, script, palette, director){
 function buildFallbackScript(theme, palette, director, sceneCount){
   const detective={
     name:'Jack Whiskers',
-    cat_face:'siamois aux yeux bleus perçants, museau crème, oreilles pointues',
-    outfit:'trench-coat pastel rose, fedora moutarde, cravate crème, gants gris',
-    physical_description:'cute kawaii humanoid kitten with a siamese cat face, wearing a pastel pink trench coat, mustard fedora hat, cream tie, grey gloves, film noir 1940s'
+    cat_face:'siamois aux yeux bleus perçants',
+    outfit:'trench-coat pastel rose, fedora moutarde',
+    physical_description:'cute kawaii humanoid kitten with a siamese cat face, pastel pink trench coat, mustard fedora, film noir 1940s'
   };
   const keyframes=[];
   for(let i=0;i<=sceneCount;i++){
     let desc;
-    if(i===0) desc='wide establishing shot of a rainy pastel harbour at night, fog rolling in, chrome pistols, a lone kitten detective silhouette in pastel pink trench coat';
-    else if(i===sceneCount) desc='closing wide shot of the kitten detective walking away into the pastel fog, back to camera, chrome pistol in hand, resolution of the case';
-    else desc='medium shot of the kitten detective in a pastel noir set (bar, office, harbour, alley), contemplating a clue, chrome prop in focus';
+    if(i===0) desc='wide establishing shot of a rainy pastel harbour at night, fog rolling in, a lone kitten detective silhouette in pastel pink trench coat';
+    else if(i===sceneCount) desc='closing wide shot of the kitten detective walking away into the pastel fog, resolution of the case';
+    else desc='medium shot of the kitten detective in a pastel noir set, contemplating a clue, chrome prop in focus';
     keyframes.push({index:i,prompt:desc});
   }
   const scenes=[];
@@ -1026,37 +987,22 @@ function buildFallbackScript(theme, palette, director, sceneCount){
     let line, decor, action, overlay;
     if(sceneNum===1){line='La pluie n\'efface jamais rien dans ce port.'; decor='rainy pastel harbour at night with fog'; action='the kitten detective lights a cigarette while looking out at the harbour'; overlay='LE PORT — NUIT';}
     else if(sceneNum===sceneCount){line='Le coupable portait un masque pastel.'; decor='elegant pastel parlour with chandelier'; action='the detective reveals the culprit, a persian cat with golden eyes'; overlay='RÉSOLUTION';}
-    else{line='Chaque bocal cache un poisson rouge.'; decor='a retro pastel noir interior (bar, office, alley)'; action='the detective examines a clue, chrome pistol near hand'; overlay='ENQUÊTE — SUITE';}
+    else{line='Chaque bocal cache un poisson rouge.'; decor='retro pastel noir interior'; action='the detective examines a clue, chrome pistol near hand'; overlay='ENQUÊTE — SUITE';}
     scenes.push({
-      scene_number:sceneNum,
-      keyframe_start:i,
-      keyframe_end:i+1,
+      scene_number:sceneNum, keyframe_start:i, keyframe_end:i+1,
       character:{name:detective.name, physical_description:detective.physical_description},
-      decor:decor,
-      action:action,
+      decor, action,
       dialogue:{speaker:detective.name, line_fr:line},
-      text_overlay_fr:overlay,
-      emotion:'tension'
+      text_overlay_fr:overlay, emotion:'tension'
     });
   }
-  return {
-    title:'Le Poisson Rouge du Maire',
-    logline:'Un chaton détective enquête sur la disparition d\'un poisson rouge dans un port brumeux des années 40.',
-    detective:detective,
-    keyframes:keyframes,
-    scenes:scenes
-  };
+  return { title:'Le Poisson Rouge du Maire', logline:'Un chaton détective enquête dans un port brumeux des années 40.', detective, keyframes, scenes };
 }
 
 function normalizeScript(script, sceneCount){
   if(!script||!script.scenes||!Array.isArray(script.scenes))return null;
   if(!script.detective||!script.detective.name){
-    script.detective={
-      name:'Jack Whiskers',
-      cat_face:'siamois aux yeux bleus',
-      outfit:'trench-coat pastel rose, fedora moutarde',
-      physical_description:'cute kawaii humanoid kitten with a siamese cat face, pastel pink trench coat, mustard fedora, film noir 1940s'
-    };
+    script.detective={ name:'Jack Whiskers', cat_face:'siamois', outfit:'trench-coat pastel rose', physical_description:'cute kawaii humanoid kitten with a siamese cat face, pastel pink trench coat, mustard fedora, film noir 1940s' };
   }
   if(script.scenes.length>sceneCount)script.scenes=script.scenes.slice(0,sceneCount);
   while(script.scenes.length<sceneCount){
@@ -1066,9 +1012,8 @@ function normalizeScript(script, sceneCount){
   }
   if(!Array.isArray(script.keyframes)||script.keyframes.length<sceneCount+1){
     const existing=Array.isArray(script.keyframes)?script.keyframes:[];
-    const needed=sceneCount+1;
-    for(let i=existing.length;i<needed;i++){
-      existing.push({index:i,prompt:'medium shot of the kitten detective in a pastel noir set, chrome prop, low-key lighting'});
+    for(let i=existing.length;i<sceneCount+1;i++){
+      existing.push({index:i,prompt:'medium shot of the kitten detective in a pastel noir set'});
     }
     script.keyframes=existing;
   }
@@ -1077,12 +1022,8 @@ function normalizeScript(script, sceneCount){
     sc.scene_number=i+1;
     if(sc.keyframe_start===undefined)sc.keyframe_start=i;
     if(sc.keyframe_end===undefined)sc.keyframe_end=i+1;
-    if(!sc.character||!sc.character.name){
-      sc.character={name:script.detective.name, physical_description:script.detective.physical_description};
-    }
-    if(!sc.dialogue||!sc.dialogue.line_fr){
-      sc.dialogue={speaker:sc.character.name, line_fr:'Chaque bocal cache un poisson rouge.'};
-    }
+    if(!sc.character||!sc.character.name)sc.character={name:script.detective.name, physical_description:script.detective.physical_description};
+    if(!sc.dialogue||!sc.dialogue.line_fr)sc.dialogue={speaker:sc.character.name, line_fr:'Chaque bocal cache un poisson rouge.'};
     if(!sc.text_overlay_fr)sc.text_overlay_fr='ENQUÊTE '+(i+1);
     if(!sc.emotion)sc.emotion='tension';
   });
@@ -1121,7 +1062,6 @@ function renderPalettes(){
     btn.addEventListener('click',()=>{
       state.palette=PALETTES.find(x=>x.id===btn.dataset.palette)||PALETTES[0];
       renderPalettes();
-      debugLog('info','PALETTE','Palette : '+state.palette.label);
     });
   });
 }
@@ -1132,7 +1072,6 @@ function renderDirectorSelect(){
   sel.innerHTML=DIRECTORS.map(d=>'<option value="'+d.id+'"'+(state.director.id===d.id?' selected':'')+'>'+esc(d.name)+'</option>').join('');
   sel.addEventListener('change',()=>{
     state.director=DIRECTORS.find(d=>d.id===sel.value)||DIRECTORS[0];
-    debugLog('info','DIRECTOR','Style : '+state.director.name);
   });
 }
 
@@ -1190,9 +1129,7 @@ function renderKeyframes(){
         card.className='kf-card done';
         body.innerHTML='';
         const img=document.createElement('img');
-        img.src=kf.url;
-        img.loading='lazy';
-        img.alt='Keyframe '+(i+1);
+        img.src=kf.url;img.loading='lazy';img.alt='Keyframe '+(i+1);
         body.appendChild(img);
         card.dataset.url=kf.url;
       }
@@ -1218,15 +1155,8 @@ function renderVideos(){
     const card=document.createElement('div');
     card.className='scene-card';
     card.dataset.index=String(i);
-    card.dataset.status='';
-    card.dataset.progress='';
-    card.dataset.url='';
-    card.innerHTML=
-      '<div class="scene-card-header">'+
-        '<span class="scene-card-title">🎬 Scène '+(i+1)+'</span>'+
-        '<span class="scene-card-status"></span>'+
-      '</div>'+
-      '<div class="scene-card-body"></div>';
+    card.dataset.status='';card.dataset.progress='';card.dataset.url='';
+    card.innerHTML='<div class="scene-card-header"><span class="scene-card-title">🎬 Scène '+(i+1)+'</span><span class="scene-card-status"></span></div><div class="scene-card-body"></div>';
     grid.appendChild(card);
   }
   state.videos.forEach((v,i)=>{
@@ -1241,16 +1171,12 @@ function renderVideos(){
         statusEl.innerHTML='<span style="color:var(--ok);">✓</span>';
         bodyEl.innerHTML='';
         const video=document.createElement('video');
-        video.src=v.url;
-        video.controls=true;
-        video.preload='metadata';
+        video.src=v.url;video.controls=true;video.preload='metadata';
         video.setAttribute('playsinline','');
         bodyEl.appendChild(video);
         const dl=document.createElement('a');
         dl.className='scene-download';
-        dl.href=v.url;
-        dl.target='_blank';
-        dl.rel='noopener noreferrer';
+        dl.href=v.url;dl.target='_blank';dl.rel='noopener noreferrer';
         dl.setAttribute('download','scene-'+(i+1)+'.mp4');
         dl.textContent='⬇ Télécharger / ouvrir';
         bodyEl.appendChild(dl);
@@ -1284,10 +1210,7 @@ async function callChatCompletion(systemPrompt, userPrompt, label, maxTokens, te
   if(!usrMsg)throw new Error('Prompt vide');
   const body={
     model:MODEL_TEXT,
-    messages:[
-      {role:'system',content:sysMsg},
-      {role:'user',content:usrMsg}
-    ],
+    messages:[{role:'system',content:sysMsg},{role:'user',content:usrMsg}],
     temperature:typeof temperature==='number'?temperature:0.7,
     max_tokens:maxTokens||32000,
     reasoning_effort:'none',
@@ -1305,105 +1228,81 @@ async function callChatCompletion(systemPrompt, userPrompt, label, maxTokens, te
 
 async function llmWriteScript(theme, palette, director, sceneCount){
   const prompt=buildScriptPrompt(theme, palette, director, sceneCount);
-  const systemPrompt='Tu es scénariste et réalisateur d\'un polar pastel chaton. Tu retournes TOUJOURS un JSON strict, valide. Pas de markdown. Pas de commentaire. Chaînes sur une seule ligne. Chaque scène a un dialogue.line_fr EN FRANÇAIS, court (5-12 mots). Tous les personnages sont des chatons kawaii en tenue de polar 1940. Tu respectes strictement la continuité keyframes (chaque keyframe_end d\'une scène = keyframe_start de la suivante).';
-
+  const systemPrompt='Tu es scénariste. Tu retournes TOUJOURS un JSON strict valide. Pas de markdown. Chaînes sur une seule ligne. Chaque scène a un dialogue.line_fr EN FRANÇAIS court (5-12 mots). Personnages : chatons kawaii en tenue de polar 1940.';
   for(let attempt=1;attempt<=2;attempt++){
     const temp=attempt===1?0.75:0.35;
-    debugLog('ai','PROMPT SCÉNARIO','Tentative '+attempt+'/2 (temp='+temp+')');
     let content;
-    try{
-      content=await callChatCompletion(systemPrompt,prompt,'Scénario (essai '+attempt+')',32000,temp);
-    }catch(e){
-      debugLog('error','SCÉNARIO','Appel échoué : '+e.message);
-      continue;
-    }
+    try{ content=await callChatCompletion(systemPrompt,prompt,'Scénario (essai '+attempt+')',32000,temp); }
+    catch(e){ debugLog('error','SCÉNARIO','Appel échoué : '+e.message); continue; }
     if(!content)continue;
     const parsed=extractJson(content);
     if(parsed&&parsed.scenes&&Array.isArray(parsed.scenes)){
-      debugLog('success','SCÉNARIO','JSON valide à la tentative '+attempt);
       const normalized=normalizeScript(parsed, sceneCount);
-      if(normalized)return normalized;
+      if(normalized){ debugLog('success','SCÉNARIO','OK tentative '+attempt); return normalized; }
     }
-    debugLog('warn','SCÉNARIO','Tentative '+attempt+' → JSON invalide');
   }
-  debugLog('warn','SCÉNARIO','2 tentatives échouées → FALLBACK programmatique');
-  journalLog('⚠️ Le LLM n\'a pas produit de JSON valide — je fabrique un scénario de secours.','warn');
+  debugLog('warn','SCÉNARIO','Fallback programmatique');
   return normalizeScript(buildFallbackScript(theme, palette, director, sceneCount), sceneCount);
 }
 
 // ══════════════════════════════════════════════════════════════════
-// PIPELINE PRINCIPAL
+// PIPELINE
 // ══════════════════════════════════════════════════════════════════
 async function runProduction(){
   if(state.isRunning)return;
   if(!hasActiveKey()){showToast('Ajoutez au moins une clé API','error');return}
 
-  state.isRunning=true;
-  state.stopRequested=false;
-  state.script=null;
-  state.keyframes=[];
-  state.videos=[];
+  state.isRunning=true;state.stopRequested=false;
+  state.script=null;state.keyframes=[];state.videos=[];
   state.workingPollUrlBuilder=null;
 
-  document.getElementById('section-script').classList.add('hidden');
-  document.getElementById('section-keyframes').classList.add('hidden');
-  document.getElementById('section-videos').classList.add('hidden');
-  document.getElementById('section-player').classList.add('hidden');
+  ['section-script','section-keyframes','section-videos','section-player'].forEach(id=>document.getElementById(id).classList.add('hidden'));
   document.getElementById('kf-grid').innerHTML='';
   document.getElementById('videos-grid').innerHTML='';
   updateButtons();
 
   const nKeys=state.keyPool.filter(k=>k.active).length;
-  journalLog('Production lancée — '+state.director.name+' · palette '+state.palette.label+' · '+state.sceneCount+' scènes · '+nKeys+' worker(s).','highlight');
+  journalLog('Production lancée — '+state.director.name+' · '+state.sceneCount+' scènes · '+nKeys+' worker(s).','highlight');
 
   try{
-    // ÉTAPE 1 — Scénario
     setStatus('Étape 1/3 — Écriture du scénario…');
-    journalLog('L\'IA écrit le scénario du polar chaton…','script');
+    journalLog('L\'IA écrit le scénario…','script');
     const script=await llmWriteScript(state.theme, state.palette, state.director, state.sceneCount);
-    state.script=script;
-    state.sceneCount=script.scenes.length;
-    renderScript();
-    revealSection('section-script');
-    journalLog('Scénario prêt : « '+script.title+' » · '+(script.keyframes||[]).length+' keyframes · '+(script.scenes||[]).length+' scènes.','success');
+    state.script=script;state.sceneCount=script.scenes.length;
+    renderScript();revealSection('section-script');
+    journalLog('Scénario prêt : « '+script.title+' »','success');
     await sleep(500);
     if(state.stopRequested)throw new Error('Arrêt demandé');
 
-    // ÉTAPE 2 — Keyframes
     setStatus('Étape 2/3 — Génération des images-clés…');
-    journalLog('Génération des '+script.keyframes.length+' images-clés…','kf');
+    journalLog('Génération de '+script.keyframes.length+' images-clés…','kf');
     revealSection('section-keyframes');
     state.keyframes=script.keyframes.map((kf,i)=>({index:i,status:'pending',url:null,prompt:kf.prompt||''}));
     renderKeyframes();
 
     for(let i=0;i<state.keyframes.length;i++){
       if(state.stopRequested)throw new Error('Arrêt demandé');
-      state.keyframes[i].status='loading';
-      renderKeyframes();
+      state.keyframes[i].status='loading';renderKeyframes();
       setStatus('Image-clé '+(i+1)+'/'+state.keyframes.length+'…');
       try{
         const fullPrompt=buildKeyframePrompt(state.keyframes[i].prompt, i, state.keyframes.length, script, state.palette, state.director);
         const url=await generateImage(fullPrompt);
-        state.keyframes[i].status='done';
-        state.keyframes[i].url=url;
+        state.keyframes[i].status='done';state.keyframes[i].url=url;
         renderKeyframes();
         journalLog('Image-clé '+(i+1)+'/'+state.keyframes.length+' ✓','kf');
       }catch(e){
         if(e.message==='Arrêt demandé')throw e;
-        state.keyframes[i].status='error';
-        renderKeyframes();
+        state.keyframes[i].status='error';renderKeyframes();
         journalLog('Image-clé '+(i+1)+' échouée : '+e.message,'error');
       }
     }
 
-    const kfOk=state.keyframes.filter(k=>k.status==='done').length;
-    journalLog(kfOk+'/'+state.keyframes.length+' images-clés prêtes.','kf');
+    journalLog(state.keyframes.filter(k=>k.status==='done').length+'/'+state.keyframes.length+' images-clés prêtes.','kf');
     await sleep(400);
     if(state.stopRequested)throw new Error('Arrêt demandé');
 
-    // ÉTAPE 3 — Vidéos keyframes
-    setStatus('Étape 3/3 — Génération des vidéos keyframes…');
-    journalLog('Génération des '+script.scenes.length+' scènes vidéo en parallèle…','video');
+    setStatus('Étape 3/3 — Génération des vidéos…');
+    journalLog('Génération des '+script.scenes.length+' vidéos en parallèle…','video');
     revealSection('section-videos');
     state.videos=script.scenes.map((_,i)=>({index:i,status:'pending',url:null,progress:'En attente…',error:null}));
     renderVideos();
@@ -1420,27 +1319,21 @@ async function runProduction(){
 
   }catch(e){
     if(e.message==='Arrêt demandé'){
-      journalLog('Arrêt demandé par l\'utilisateur.','warn');
+      journalLog('Arrêt demandé.','warn');
       setStatus('Arrêté.');
-      await sleep(1200);
-      setStatus(null);
+      await sleep(1200);setStatus(null);
     }else{
       journalLog('Erreur : '+e.message,'error');
       debugLog('error','PIPELINE',e.message);
-      setStatus('Erreur — voir la console.');
-      await sleep(2400);
-      setStatus(null);
+      setStatus('Erreur — voir console.');
+      await sleep(2400);setStatus(null);
     }
   }
 
-  state.isRunning=false;
-  state.stopRequested=false;
+  state.isRunning=false;state.stopRequested=false;
   updateButtons();
 }
 
-// ══════════════════════════════════════════════════════════════════
-// GÉNÉRATION VIDÉOS — PARALLÈLE
-// ══════════════════════════════════════════════════════════════════
 async function generateAllVideos(script){
   state.isGeneratingVideos=true;
   const workerCount=Math.max(1,state.keyPool.filter(k=>k.active).length);
@@ -1448,16 +1341,13 @@ async function generateAllVideos(script){
 
   const queue=script.scenes.map((scene,index)=>({scene,index}));
   const workers=[];
-  for(let w=0;w<workerCount;w++){
-    workers.push(videoWorker(w,queue,script));
-  }
+  for(let w=0;w<workerCount;w++)workers.push(videoWorker(w,queue,script));
   await Promise.all(workers);
 
   state.isGeneratingVideos=false;
   const done=state.videos.filter(v=>v.status==='done').length;
   const total=script.scenes.length;
-  if(state.stopRequested)journalLog('Bilan (arrêté) : '+done+'/'+total+' scènes prêtes.','warn');
-  else journalLog('Bilan : '+done+'/'+total+' scènes prêtes.',done>0?'success':'error');
+  journalLog('Bilan : '+done+'/'+total+' vidéos prêtes.',done>0?'success':'error');
 }
 
 async function videoWorker(workerId, queue, script){
@@ -1472,11 +1362,10 @@ async function generateOneVideo(scene, index, script, workerId){
   if(state.stopRequested)return;
   const kfStart=state.keyframes[scene.keyframe_start];
   const kfEnd=state.keyframes[scene.keyframe_end];
-  if(!kfStart||kfStart.status!=='done'||!kfEnd||kfEnd.status!=='done'){
+  if(!kfStart||kfStart.status!=='done'){
     state.videos[index].status='error';
-    state.videos[index].error='Keyframe manquante';
-    renderVideos();
-    return;
+    state.videos[index].error='Keyframe de départ manquante';
+    renderVideos();return;
   }
   const prompt=buildVideoPrompt(scene, script, state.palette, state.director);
   state.videos[index].status='loading';
@@ -1484,11 +1373,11 @@ async function generateOneVideo(scene, index, script, workerId){
   renderVideos();
 
   const charName=(scene.character&&scene.character.name)||'?';
-  const voiceLine=(scene.dialogue&&scene.dialogue.line_fr)||'';
-  journalLog('Worker '+(workerId+1)+' → Scène '+(index+1)+' ['+charName+'] : '+(voiceLine?('« '+voiceLine.slice(0,45)+'… »'):'…'),'video');
+  journalLog('Worker '+(workerId+1)+' → Scène '+(index+1)+' ['+charName+']','video');
 
   try{
-    const videoIdObj=await createVideoTask(prompt, kfStart.url, kfEnd.url, state.durationFrames);
+    // On envoie kfStart ET kfEnd pour que l'API puisse faire du keyframe si supporté
+    const videoIdObj=await createVideoTask(prompt, kfStart.url, (kfEnd&&kfEnd.status==='done'?kfEnd.url:null), state.durationFrames);
     const videoUrl=await pollVideo(videoIdObj,(prog)=>{
       state.videos[index].progress=prog;
       renderVideos();
@@ -1496,8 +1385,7 @@ async function generateOneVideo(scene, index, script, workerId){
     state.videos[index].status='done';
     state.videos[index].url=videoUrl;
     renderVideos();
-    journalLog('Worker '+(workerId+1)+' → Scène '+(index+1)+' prête.','success');
-    debugLog('success','VIDÉO '+(index+1),'Terminée (worker '+(workerId+1)+')');
+    journalLog('Worker '+(workerId+1)+' → Scène '+(index+1)+' prête ✓','success');
   }catch(e){
     if(e.message==='Arrêt demandé')return;
     state.videos[index].status='error';
@@ -1518,19 +1406,16 @@ function pickFrenchVoice(){
   if(!voices||voices.length===0)return null;
   const fr=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('fr'));
   if(fr.length===0)return null;
-  const preferred=fr.find(v=>/premium|enhanced|amelie|thomas|audrey|marie/i.test(v.name));
-  return preferred||fr[0];
+  return fr.find(v=>/premium|enhanced|amelie|thomas|audrey|marie/i.test(v.name))||fr[0];
 }
 function initTTS(){
   if(!('speechSynthesis' in window))return;
-  const update=()=>{ttsVoice=pickFrenchVoice();if(ttsVoice)debugLog('success','TTS','Voix : '+ttsVoice.name)};
+  const update=()=>{ttsVoice=pickFrenchVoice()};
   update();
   window.speechSynthesis.onvoiceschanged=update;
 }
 function speakFR(text){
-  if(!state.voiceEnabled)return;
-  if(!('speechSynthesis' in window))return;
-  if(!text)return;
+  if(!state.voiceEnabled||!('speechSynthesis' in window)||!text)return;
   try{
     window.speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
@@ -1538,7 +1423,7 @@ function speakFR(text){
     if(ttsVoice)u.voice=ttsVoice;
     window.speechSynthesis.speak(u);
     state.currentUtterance=u;
-    journalLog('🔊 « '+text.slice(0,90)+(text.length>90?'…':'')+' »','voice');
+    journalLog('🔊 « '+text.slice(0,90)+' »','voice');
   }catch(e){}
 }
 function stopTTS(){try{if('speechSynthesis' in window)window.speechSynthesis.cancel()}catch(e){}state.currentUtterance=null}
@@ -1553,8 +1438,7 @@ async function playFilm(){
   const ready=state.videos.filter(v=>v.status==='done'&&v.url);
   if(ready.length===0){showToast('Aucune vidéo à diffuser','error');return}
   if(state.isPlayingFilm)return;
-  state.isPlayingFilm=true;
-  updateButtons();
+  state.isPlayingFilm=true;updateButtons();
 
   const overlay=document.getElementById('player-overlay');
   const canvas=document.getElementById('player-canvas');
@@ -1562,12 +1446,9 @@ async function playFilm(){
   if(!overlay||!canvas)return;
 
   const dpr=Math.min(window.devicePixelRatio||1,2);
-  const cssW=window.innerWidth;
-  const cssH=window.innerHeight;
-  canvas.width=Math.round(cssW*dpr);
-  canvas.height=Math.round(cssH*dpr);
-  canvas.style.width=cssW+'px';
-  canvas.style.height=cssH+'px';
+  const cssW=window.innerWidth,cssH=window.innerHeight;
+  canvas.width=Math.round(cssW*dpr);canvas.height=Math.round(cssH*dpr);
+  canvas.style.width=cssW+'px';canvas.style.height=cssH+'px';
   const ctx=canvas.getContext('2d');
 
   overlay.classList.add('visible');
@@ -1576,8 +1457,7 @@ async function playFilm(){
 
   try{
     if('speechSynthesis' in window){
-      const u0=new SpeechSynthesisUtterance(' ');
-      u0.volume=0;
+      const u0=new SpeechSynthesisUtterance(' ');u0.volume=0;
       window.speechSynthesis.speak(u0);
     }
   }catch(e){}
@@ -1586,16 +1466,15 @@ async function playFilm(){
 
   const script=state.script||{scenes:[]};
   const scenes=script.scenes||[];
-  const readyWithScene = ready.map(v => {
-    const origIndex = state.videos.indexOf(v);
-    return { video:v, scene: scenes[origIndex] || {} };
+  const readyWithScene=ready.map(v=>{
+    const origIndex=state.videos.indexOf(v);
+    return {video:v,scene:scenes[origIndex]||{}};
   });
 
   for(let i=0;i<readyWithScene.length;i++){
     if(!state.isPlayingFilm)break;
     const {video,scene}=readyWithScene[i];
-    const chName=(scene.character&&scene.character.name)||'';
-    journalLog('Scène '+(i+1)+'/'+readyWithScene.length+(chName?' ['+chName+']':'')+' — '+(scene.text_overlay_fr||''),'play');
+    journalLog('Scène '+(i+1)+'/'+readyWithScene.length,'play');
     await playOneScene(video,scene,ctx,canvas,dpr);
   }
 
@@ -1603,58 +1482,44 @@ async function playFilm(){
   journalLog('Diffusion terminée.','success');
 }
 
-function playOneScene(videoObj, scene, ctx, canvas, dpr){
+function playOneScene(videoObj,scene,ctx,canvas,dpr){
   return new Promise((resolve)=>{
     const video=document.createElement('video');
-    video.src=videoObj.url;
-    video.playsInline=true;
-    video.muted=true;
-    let ttsFired=false;
-    let finished=false;
+    video.src=videoObj.url;video.playsInline=true;video.muted=true;
+    let ttsFired=false,finished=false;
     const finish=()=>{if(finished)return;finished=true;resolve()};
-    const startTTS=()=>{
-      if(ttsFired)return;
-      ttsFired=true;
-      const line=getSceneSpeechLine(scene);
-      if(line)speakFR(line);
-    };
+    const startTTS=()=>{if(ttsFired)return;ttsFired=true;const l=getSceneSpeechLine(scene);if(l)speakFR(l)};
     const ttsGuard=setTimeout(()=>{startTTS()},2000);
 
     const drawOverlay=(w,h)=>{
-      const t=video.currentTime||0;
-      const dur=video.duration||6;
+      const t=video.currentTime||0,dur=video.duration||6;
       let alpha=1;
-      if(t<0.4)alpha=t/0.4;
-      else if(dur-t<0.5)alpha=Math.max(0,(dur-t)/0.5);
+      if(t<0.4)alpha=t/0.4;else if(dur-t<0.5)alpha=Math.max(0,(dur-t)/0.5);
       if(alpha<=0)return;
-      const pad=Math.round(Math.min(30*dpr, w*0.03));
-      const bandH=Math.round(Math.min(96*dpr, h*0.16));
-      const bandY=h-bandH-pad;
-      const bandX=pad;
-      const bandW=w-pad*2;
-      ctx.save();
-      ctx.globalAlpha=alpha;
+      const pad=Math.round(Math.min(30*dpr,w*0.03));
+      const bandH=Math.round(Math.min(96*dpr,h*0.16));
+      const bandY=h-bandH-pad,bandX=pad,bandW=w-pad*2;
+      ctx.save();ctx.globalAlpha=alpha;
       const grad=ctx.createLinearGradient(bandX,bandY,bandX,bandY+bandH);
       grad.addColorStop(0,'rgba(10,10,18,0.0)');
       grad.addColorStop(0.35,'rgba(10,10,18,0.85)');
       grad.addColorStop(1,'rgba(10,10,18,0.95)');
-      ctx.fillStyle=grad;
-      ctx.fillRect(bandX,bandY,bandW,bandH);
+      ctx.fillStyle=grad;ctx.fillRect(bandX,bandY,bandW,bandH);
       ctx.fillStyle='#e5c15a';
       ctx.fillRect(bandX,bandY+Math.round(bandH*0.15),Math.round(5*dpr),bandH-Math.round(bandH*0.3));
-      const speakerName=(scene.dialogue&&scene.dialogue.speaker)||(scene.character&&scene.character.name)||(state.script&&state.script.detective&&state.script.detective.name)||'';
-      const nameSize=Math.round(Math.min(15*dpr, h*0.022));
-      const textSize=Math.round(Math.min(22*dpr, h*0.032));
+      const speakerName=(scene.dialogue&&scene.dialogue.speaker)||(scene.character&&scene.character.name)||'';
+      const nameSize=Math.round(Math.min(15*dpr,h*0.022));
+      const textSize=Math.round(Math.min(22*dpr,h*0.032));
       if(speakerName){
         ctx.fillStyle='#e5c15a';
-        ctx.font='700 '+nameSize+'px -apple-system, BlinkMacSystemFont, Helvetica, Arial';
+        ctx.font='700 '+nameSize+'px -apple-system,BlinkMacSystemFont,Helvetica,Arial';
         ctx.textBaseline='top';
         ctx.fillText(speakerName.toUpperCase(),bandX+Math.round(bandH*0.22),bandY+Math.round(bandH*0.18));
       }
       const overlayText=scene.text_overlay_fr||(scene.dialogue&&scene.dialogue.line_fr)||'';
       if(overlayText){
         ctx.fillStyle='#f5f0e1';
-        ctx.font='500 '+textSize+'px -apple-system, BlinkMacSystemFont, Helvetica, Arial';
+        ctx.font='500 '+textSize+'px -apple-system,BlinkMacSystemFont,Helvetica,Arial';
         ctx.textBaseline='top';
         let txt=overlayText;
         const maxW=bandW-Math.round(bandH*0.4);
@@ -1664,12 +1529,9 @@ function playOneScene(videoObj, scene, ctx, canvas, dpr){
       ctx.restore();
     };
     const draw=()=>{
-      ctx.fillStyle='#000';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      const vw=video.videoWidth||1280;
-      const vh=video.videoHeight||720;
-      const ar=vw/vh;
-      const car=canvas.width/canvas.height;
+      ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+      const vw=video.videoWidth||1280,vh=video.videoHeight||720;
+      const ar=vw/vh,car=canvas.width/canvas.height;
       let dw,dh,dx,dy;
       if(ar>car){dw=canvas.width;dh=canvas.width/ar;dx=0;dy=(canvas.height-dh)/2}
       else{dh=canvas.height;dw=canvas.height*ar;dx=(canvas.width-dw)/2;dy=0}
@@ -1682,11 +1544,7 @@ function playOneScene(videoObj, scene, ctx, canvas, dpr){
       draw();
       state.playRAF=requestAnimationFrame(loop);
     };
-    video.onloadedmetadata=()=>{
-      clearTimeout(ttsGuard);
-      startTTS();
-      video.play().then(()=>{loop()}).catch(()=>{startTTS();finish()});
-    };
+    video.onloadedmetadata=()=>{clearTimeout(ttsGuard);startTTS();video.play().then(()=>{loop()}).catch(()=>{startTTS();finish()})};
     video.oncanplay=()=>{startTTS()};
     video.onended=()=>{clearTimeout(ttsGuard);finish()};
     video.onerror=()=>{startTTS();clearTimeout(ttsGuard);finish()};
@@ -1709,9 +1567,7 @@ function stopFilmPlayback(){
 // ══════════════════════════════════════════════════════════════════
 (function init(){
   document.getElementById('api-save-btn').addEventListener('click',saveKeysFromUI);
-  document.getElementById('api-keys-input').addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();saveKeysFromUI()}
-  });
+  document.getElementById('api-keys-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();saveKeysFromUI()}});
 
   document.querySelectorAll('[data-toggle]').forEach(h=>{
     h.addEventListener('click',()=>{
@@ -1731,36 +1587,20 @@ function stopFilmPlayback(){
     try{localStorage.setItem(THEME_STORAGE,state.theme)}catch(err){}
   });
 
-  renderPalettes();
-  renderDirectorSelect();
+  renderPalettes();renderDirectorSelect();
 
-  document.getElementById('scene-count-select').addEventListener('change',e=>{
-    state.sceneCount=parseInt(e.target.value,10);
-    updateButtons();
-  });
-  document.getElementById('duration-select').addEventListener('change',e=>{
-    state.durationFrames=parseInt(e.target.value,10);
-    updateButtons();
-  });
+  document.getElementById('scene-count-select').addEventListener('change',e=>{state.sceneCount=parseInt(e.target.value,10);updateButtons()});
+  document.getElementById('duration-select').addEventListener('change',e=>{state.durationFrames=parseInt(e.target.value,10);updateButtons()});
 
   document.getElementById('launch-btn').addEventListener('click',runProduction);
-  document.getElementById('stop-btn').addEventListener('click',()=>{
-    state.stopRequested=true;
-    stopTTS();
-    debugLog('warn','STOP','Arrêt demandé');
-    journalLog('Arrêt demandé — je termine proprement…','warn');
-    setStatus('Arrêt en cours…');
-  });
+  document.getElementById('stop-btn').addEventListener('click',()=>{state.stopRequested=true;stopTTS();journalLog('Arrêt demandé…','warn');setStatus('Arrêt en cours…')});
 
   document.getElementById('play-film-btn').addEventListener('click',playFilm);
   document.getElementById('replay-btn').addEventListener('click',playFilm);
   document.getElementById('player-overlay').addEventListener('click',stopFilmPlayback);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.isPlayingFilm)stopFilmPlayback()});
 
-  document.getElementById('voice-toggle').addEventListener('change',e=>{
-    state.voiceEnabled=e.target.checked;
-    if(!state.voiceEnabled)stopTTS();
-  });
+  document.getElementById('voice-toggle').addEventListener('change',e=>{state.voiceEnabled=e.target.checked;if(!state.voiceEnabled)stopTTS()});
 
   document.getElementById('tab-journal').addEventListener('click',()=>switchTab('journal'));
   document.getElementById('tab-tech').addEventListener('click',()=>switchTab('tech'));
@@ -1773,11 +1613,10 @@ function stopFilmPlayback(){
   updateButtons();
   initTTS();
 
-  setInterval(renderKeysStatus, 1000);
+  setInterval(renderKeysStatus,1000);
 
-  debugLog('success','INIT','Film Noir Chaton — Studio prêt (v2 corrigée)');
-  debugLog('info','INIT','Pipeline : SCÉNARIO → KEYFRAMES → VIDÉOS keyframes → PLAYER + overlay FR + TTS');
-  debugLog('info','INIT','Format keyframes : extra_body.image = [frame1, frame2]');
+  debugLog('success','INIT','Film Noir Chaton — Studio prêt');
+  debugLog('info','INIT','Format vidéo : image à la racine (validé Kata Studio)');
   debugLog('info','INIT','Modèles : '+MODEL_TEXT+' / '+MODEL_IMAGE+' / '+MODEL_VIDEO);
 
   journalLog('Prêt. Ajoutez vos clés API puis cliquez sur « Lancer la production ».','highlight');
