@@ -288,7 +288,7 @@ select option{background:var(--bg2);color:var(--ink)}
 
 <script>
 // ══════════════════════════════════════════════════════════════════
-// CONFIGURATION — repris des codes sources
+// CONFIGURATION
 // ══════════════════════════════════════════════════════════════════
 const API_BASE = 'https://apihub.agnes-ai.com/v1';
 const POLL_BASE = 'https://apihub.agnes-ai.com/agnesapi';
@@ -307,7 +307,6 @@ const DEBUG_MAX = 800;
 
 const DEFAULT_THEME = "Un chaton détective solitaire enquête sur la disparition d'un poisson rouge dans le bocal du maire d'un port brumeux des années 40. Pistoles chromées, imperméables pastel, brume rose et secrets enfouis. Il découvre que le coupable n'est autre que le majordome — un chat persan aux yeux d'or.";
 
-// Palettes pastel polar
 const PALETTES = [
   {id:'noir-pastel',    label:'Noir pastel',       colors:['#2a2a3a','#e5c15a','#e8a87c','#a8c8b8','#f5f0e1']},
   {id:'rose-brume',     label:'Rose brume',        colors:['#f4c2c2','#8a6a7a','#e5b95a','#a8d8b9','#f5f0e1']},
@@ -317,7 +316,6 @@ const PALETTES = [
   {id:'lavande-nuit',   label:'Lavande nuit',      colors:['#c5b7d9','#3b3b4b','#e5c15a','#e8a87c','#f5efe0']}
 ];
 
-// Réalisateurs polar
 const DIRECTORS = [
   {id:'huston',    name:'John Huston (Le Faucon Maltais)', signature:'classic film noir, smoky interiors, low-key lighting, long shadows, venetian blind shadows, trench coats and fedoras, cynical detective archetype'},
   {id:'hawks',     name:'Howard Hawks (Le Grand Sommeil)', signature:'classic noir, glistening rain-slick streets, glamorous 1940s Hollywood, sharp dialogue, high contrast black and white'},
@@ -344,8 +342,8 @@ const state = {
   sceneCount: 10,
   durationFrames: 145,
   script: null,
-  keyframes: [],       // [{index, status, url, prompt}]
-  videos: [],          // [{index, status, url, progress, error}]
+  keyframes: [],
+  videos: [],
   isGeneratingVideos: false,
   isPlayingFilm: false,
   playRAF: null,
@@ -743,29 +741,35 @@ function decodeCompositeId(composite){
   }catch(e){}
   return null;
 }
+
+// ⚡ VERSION CORRIGÉE : keyframes dans extra_body.image = [frame1, frame2]
 async function createVideoTask(prompt, firstFrameUrl, lastFrameUrl, duration) {
-  const body={
-    model:MODEL_VIDEO,
-    prompt:sanitizeForApi(prompt),
-    num_frames:duration,
-    frame_rate:FRAME_RATE
+  const body = {
+    model: MODEL_VIDEO,
+    prompt: sanitizeForApi(prompt),
+    num_frames: duration,
+    frame_rate: FRAME_RATE
   };
-  if(firstFrameUrl && lastFrameUrl){
-    body.image=firstFrameUrl;
-    body.last_frame=lastFrameUrl;
-  } else if(firstFrameUrl){
-    body.image=firstFrameUrl;
+  if (firstFrameUrl && lastFrameUrl) {
+    body.extra_body = { image: [firstFrameUrl, lastFrameUrl] };
+  } else if (firstFrameUrl) {
+    body.image = firstFrameUrl;
   }
-  debugLog('ai','PROMPT VIDÉO','Envoyé ('+prompt.length+' chars · keyframes '+(firstFrameUrl&&lastFrameUrl?'OUI':'NON')+')');
-  const res=await apiFetch(API_BASE+'/videos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},'Video Task',4);
-  const data=await res.json();
-  debugLog('response','VIDÉO CRÉÉE','Réponse du POST /videos',data);
-  const compositeId=data.video_id||data.id||data.task_id;
-  if(!compositeId)throw new Error('Pas de video_id');
-  const innerId=decodeCompositeId(compositeId);
-  debugLog('info','VIDÉO ID','composite='+String(compositeId).slice(0,60)+'… · inner='+(innerId||'—'));
-  return { compositeId:String(compositeId), innerId, raw:data };
+  debugLog('ai', 'PROMPT VIDÉO', 'Envoyé (' + prompt.length + ' chars · keyframes ' + (firstFrameUrl && lastFrameUrl ? 'OUI' : 'NON') + ')');
+  const res = await apiFetch(API_BASE + '/videos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }, 'Video Task', 4);
+  const data = await res.json();
+  debugLog('response', 'VIDÉO CRÉÉE', 'Réponse du POST /videos', data);
+  const compositeId = data.video_id || data.id || data.task_id;
+  if (!compositeId) throw new Error('Pas de video_id');
+  const innerId = decodeCompositeId(compositeId);
+  debugLog('info', 'VIDÉO ID', 'composite=' + String(compositeId).slice(0, 60) + '… · inner=' + (innerId || '—'));
+  return { compositeId: String(compositeId), innerId, raw: data };
 }
+
 function buildIdCandidates(videoIdObj){
   const ids=[];
   if(typeof videoIdObj==='string'){
@@ -999,7 +1003,7 @@ function buildVideoPrompt(scene, script, palette, director){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// FALLBACK SCRIPT (si le LLM échoue 2×)
+// FALLBACK SCRIPT
 // ══════════════════════════════════════════════════════════════════
 function buildFallbackScript(theme, palette, director, sceneCount){
   const detective={
@@ -1171,7 +1175,6 @@ function renderKeyframes(){
   if(!grid)return;
   while(grid.children.length>state.keyframes.length)grid.removeChild(grid.lastChild);
   for(let i=grid.children.length;i<state.keyframes.length;i++){
-    const kf=state.keyframes[i];
     const card=document.createElement('div');
     card.className='kf-card';
     card.dataset.index=String(i);
@@ -1407,7 +1410,6 @@ async function runProduction(){
 
     await generateAllVideos(script);
 
-    // ÉTAPE 4 — Prêt
     setStatus('✦ Polar prêt ✦');
     journalLog('Le polar est prêt à être diffusé.','success');
     document.getElementById('section-player').classList.remove('hidden');
@@ -1437,7 +1439,7 @@ async function runProduction(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// GÉNÉRATION VIDÉOS — PARALLÈLE (1 worker par clé)
+// GÉNÉRATION VIDÉOS — PARALLÈLE
 // ══════════════════════════════════════════════════════════════════
 async function generateAllVideos(script){
   state.isGeneratingVideos=true;
@@ -1773,14 +1775,12 @@ function stopFilmPlayback(){
 
   setInterval(renderKeysStatus, 1000);
 
-  debugLog('success','INIT','Film Noir Chaton — Studio prêt');
+  debugLog('success','INIT','Film Noir Chaton — Studio prêt (v2 corrigée)');
   debugLog('info','INIT','Pipeline : SCÉNARIO → KEYFRAMES → VIDÉOS keyframes → PLAYER + overlay FR + TTS');
+  debugLog('info','INIT','Format keyframes : extra_body.image = [frame1, frame2]');
   debugLog('info','INIT','Modèles : '+MODEL_TEXT+' / '+MODEL_IMAGE+' / '+MODEL_VIDEO);
-  debugLog('info','INIT','Multi-clés API · 1 worker par clé active');
-  debugLog('info','INIT','Parser JSON 5-stratégies · polling multi-endpoints · décodeur ID composite');
 
   journalLog('Prêt. Ajoutez vos clés API puis cliquez sur « Lancer la production ».','highlight');
-  journalLog('Le polar sera un film noir pastel chaton de 10 scènes en mode keyframes.','info');
 })();
 </script>
 </body>
